@@ -2,21 +2,14 @@ import streamlit as st
 import pandas as pd
 import random
 
-# Charger les questions
+# -----------------------------
+# CHARGEMENT DES DONNÉES
+# -----------------------------
 df = pd.read_excel("questions.xlsx")
 
-# Transformer la colonne categories en listes
-df["categories"] = df["categories"].apply(
-    lambda x: [c.strip().lower() for c in str(x).split(",")]
-)
-
-# Extraire toutes les catégories uniques
-all_categories = set()
-for cats in df["categories"]:
-    all_categories.update(cats)
-
-all_categories = sorted(list(all_categories))
-all_categories.insert(0, "toutes")
+# Normalisation des textes
+for col in ["categorie", "sous_categorie", "sous_sous_categorie"]:
+    df[col] = df[col].astype(str).str.strip().str.lower()
 
 # -----------------------------
 # INITIALISATION SESSION STATE
@@ -40,14 +33,24 @@ if "filtered_df" not in st.session_state:
 # -----------------------------
 # FONCTIONS
 # -----------------------------
-def appliquer_filtre(choix):
-    """Filtre les questions selon la catégorie choisie."""
-    if choix == "toutes":
-        st.session_state.filtered_df = df.copy()
+def appliquer_filtre(cat=None, souscat=None, soussouscat=None):
+    """Filtre les questions selon le niveau choisi."""
+
+    # Niveau 3 : sous-sous-catégorie (global)
+    if soussouscat:
+        st.session_state.filtered_df = df[df["sous_sous_categorie"] == soussouscat]
+
+    # Niveau 2 : sous-catégorie (global)
+    elif souscat:
+        st.session_state.filtered_df = df[df["sous_categorie"] == souscat]
+
+    # Niveau 1 : catégorie (local)
+    elif cat:
+        st.session_state.filtered_df = df[df["categorie"] == cat]
+
+    # Aucun filtre → tout
     else:
-        st.session_state.filtered_df = df[
-            df["categories"].apply(lambda cats: choix in cats)
-        ]
+        st.session_state.filtered_df = df.copy()
 
     st.session_state.filtered_df = st.session_state.filtered_df.reset_index(drop=True)
     nouvelle_question()
@@ -84,17 +87,45 @@ st.title("Quiz d'entraînement")
 # Score
 st.markdown(f"### Score : {st.session_state.score}/{st.session_state.total}")
 
-# Menu catégories
-choix = st.selectbox("Choisir une catégorie :", all_categories)
+# -----------------------------
+# MENU HIÉRARCHIQUE
+# -----------------------------
 
-if st.button("Appliquer le filtre"):
-    appliquer_filtre(choix)
+# --- Niveau 1 : Catégorie ---
+categories = sorted(df["categorie"].unique())
+cat = st.selectbox("Choisir une catégorie (ou laisser vide) :", [""] + categories)
 
-# Affichage question
+# --- Niveau 2 : Sous-catégorie dépendante ---
+if cat:
+    sous_categories = sorted(df[df["categorie"] == cat]["sous_categorie"].unique())
+else:
+    sous_categories = sorted(df["sous_categorie"].unique())
+
+souscat = st.selectbox("Choisir une sous-catégorie (optionnel) :", [""] + sous_categories)
+
+# --- Niveau 3 : Sous-sous-catégorie dépendante ---
+if souscat:
+    sous_sous_categories = sorted(df[df["sous_categorie"] == souscat]["sous_sous_categorie"].unique())
+else:
+    sous_sous_categories = sorted(df["sous_sous_categorie"].unique())
+
+soussouscat = st.selectbox("Choisir une sous-sous-catégorie (optionnel) :", [""] + sous_sous_categories)
+
+# Bouton appliquer
+if st.button("Jouer"):
+    appliquer_filtre(
+        cat if cat != "" else None,
+        souscat if souscat != "" else None,
+        soussouscat if soussouscat != "" else None
+    )
+
+# -----------------------------
+# AFFICHAGE QUESTION
+# -----------------------------
 if st.session_state.current_question:
     st.markdown(f"## {st.session_state.current_question}")
 else:
-    st.markdown("## Cliquez sur *Appliquer le filtre* pour commencer.")
+    st.markdown("## Cliquez sur *Jouer* pour commencer.")
 
 # Bouton afficher réponse
 if st.button("Afficher la réponse"):
@@ -110,4 +141,3 @@ with col1:
 with col2:
     if st.button("Mauvaise réponse"):
         mauvaise_reponse()
-
